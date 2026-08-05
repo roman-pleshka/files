@@ -2,8 +2,8 @@
 // Налаштування можна передати через env-перемінні або задати тут.
 
 const defaultFeeds = [
-  { id: "tagesschau", url: "https://www.tagesschau.de/xml/rss2/" },
-  { id: "bbc-world", url: "https://feeds.bbci.co.uk/news/world/rss.xml" },
+  { id: "tsn-ua", url: "https://tsn.ua/rss" },
+  { id: "tsn-news", url: "https://tsn.ua/rss" },
 ];
 
 const baseConfig = {

@@ -65,3 +65,20 @@ test('buildTelegramText supports different feed styles', () => {
   assert.match(bbcText, /🔵|BBC/);
   assert.match(neutralText, /📰|Tagesschau/);
 });
+
+test('formatPublishedDate uses Kyiv timezone', () => {
+  const text = bot.formatPublishedDate('Mon, 01 Jan 2024 12:00:00 GMT');
+  assert.match(text, /14:00/);
+});
+
+test('normalizeState keeps feed timestamps for time-based deduplication', () => {
+  const normalized = bot.normalizeState({
+    feeds: {
+      tsn: { lastSeenAt: 1704110400000 },
+      legacy: 'https://example.com/old',
+    },
+  });
+
+  assert.equal(normalized.feeds.tsn.lastSeenAt, 1704110400000);
+  assert.equal(typeof normalized.feeds.legacy.lastSeenAt, 'number');
+});

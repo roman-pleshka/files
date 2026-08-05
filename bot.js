@@ -65,13 +65,15 @@ function formatPublishedDate(dateValue) {
   const date = parseDate(dateValue);
   if (!date) return "";
 
-  return new Date(date).toLocaleString("uk-UA", {
+  return new Intl.DateTimeFormat("uk-UA", {
+    timeZone: "Europe/Kyiv",
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  });
+    hour12: false,
+  }).format(new Date(date));
 }
 
 function getFeedStyle(feedName = "News") {
@@ -81,8 +83,7 @@ function getFeedStyle(feedName = "News") {
     return {
       prefix: "🔵",
       titlePrefix: "BBC News",
-      accent: "<b>🔵 " + "</b>",
-      sourceColor: "<b>BBC World</b>",
+      sourceLabel: "BBC",
     };
   }
 
@@ -90,16 +91,22 @@ function getFeedStyle(feedName = "News") {
     return {
       prefix: "🟡",
       titlePrefix: "Tagesschau",
-      accent: "<b>🟡 " + "</b>",
-      sourceColor: "<b>Tagesschau</b>",
+      sourceLabel: "Tagesschau",
+    };
+  }
+
+  if (normalized.includes("tsn")) {
+    return {
+      prefix: "📢",
+      titlePrefix: "TSN",
+      sourceLabel: "TSN",
     };
   }
 
   return {
     prefix: "📰",
-    titlePrefix: "News",
-    accent: "<b>📰 " + "</b>",
-    sourceColor: "<b>News</b>",
+    titlePrefix: "Новини",
+    sourceLabel: "Новини",
   };
 }
 
@@ -107,33 +114,59 @@ function buildTelegramText(item, feedName = "News") {
   const style = getFeedStyle(feedName);
   const title = escapeHtml(item.title || "Без назви");
   const link = escapeHtml(item.link || "");
-  const source = escapeHtml(feedName || "News");
+  const source = escapeHtml(style.sourceLabel || "Новини");
   const when = formatPublishedDate(item.pubDate);
 
   const headline = style.prefix + " " + title;
-  const meta = when ? "🕒 " + when + " • " + style.titlePrefix : style.titlePrefix;
+  const meta = when ? "🕒 " + when + " • " + source : source;
 
   const parts = [
     "<b>" + headline + "</b>",
     "<i>" + meta + "</i>",
-    "<i>📌 Джерело: " + source + "</i>",
     '<a href="' + link + '">Читати повністю →</a>',
+    "<i>INSIDER UA | Прислати контент</i>",
   ].filter(Boolean);
 
   return parts.join("\n");
 }
 
+function normalizeState(rawState = {}) {
+  const safeState = rawState && typeof rawState === "object" ? rawState : {};
+  const state = { ...safeState, feeds: {} };
+
+  const rawFeeds = safeState.feeds && typeof safeState.feeds === "object" ? safeState.feeds : {};
+
+  for (const [feedId, value] of Object.entries(rawFeeds)) {
+    if (value && typeof value === "object") {
+      const lastSeenAt = Number(value.lastSeenAt || BOT_STARTED_AT);
+      state.feeds[feedId] = {
+        ...value,
+        lastSeenAt: Number.isFinite(lastSeenAt) ? lastSeenAt : BOT_STARTED_AT,
+      };
+      continue;
+    }
+
+    const lastSeenAt = Number(value || BOT_STARTED_AT);
+    state.feeds[feedId] = {
+      lastSeenAt: Number.isFinite(lastSeenAt) ? lastSeenAt : BOT_STARTED_AT,
+      lastLink: typeof value === "string" ? value : "",
+    };
+  }
+
+  return state;
+}
+
 function loadState() {
   try {
     const parsed = JSON.parse(fs.readFileSync(STATE_FILE, "utf-8"));
-    return parsed && typeof parsed === "object" ? parsed : { feeds: {} };
+    return normalizeState(parsed);
   } catch {
-    return { feeds: {} };
+    return normalizeState({ feeds: {} });
   }
 }
 
 function saveState(state) {
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+  fs.writeFileSync(STATE_FILE, JSON.stringify(normalizeState(state), null, 2));
 }
 
 function clearState() {
@@ -225,7 +258,10 @@ async function sendToTelegram(text, telegramConfig = config) {
 }
 
 async function checkFeed(feed, state, seenLinks = new Set()) {
-  console.log(`[${new Date().toLocaleString()}] Перевірка RSS: ${feed.url}`);
+  const normalizedState = normalizeState(state);
+  const lastSeenAt = Number(normalizedState.feeds?.[feed.id]?.lastSeenAt || BOT_STARTED_AT);
+
+  console.log(`[${new Intl.DateTimeFormat("uk-UA", { timeZone: "Europe/Kyiv" }).format(new Date())}] Перевірка RSS: ${feed.url}`);
 
   let xml;
   try {
@@ -233,36 +269,48 @@ async function checkFeed(feed, state, seenLinks = new Set()) {
     xml = await res.text();
   } catch (error) {
     console.error(`Не вдалося завантажити RSS для фіда ${feed.id}:`, error.message);
-    return;
+    return normalizedState;
   }
 
   const items = parseRss(xml)
-    .filter((item) => isNewSinceStartup(item, BOT_STARTED_AT))
-    .filter((item) => item.link && !seenLinks.has(item.link));
+    .map((item) => ({ ...item, publishedAt: parseDate(item.pubDate) }))
+    .filter((item) => item.link && Number.isFinite(item.publishedAt))
+    .filter((item) => !seenLinks.has(item.link))
+    .filter((item) => item.publishedAt >= BOT_STARTED_AT)
+    .filter((item) => item.publishedAt > lastSeenAt)
+    .sort((a, b) => a.publishedAt - b.publishedAt);
 
   if (items.length === 0) {
     console.log(`З моменту запуску у ${feed.id} нових статей немає.`);
-    return;
+    state.feeds = normalizedState.feeds;
+    return normalizedState;
   }
 
-  for (const item of [...items].reverse()) {
+  for (const item of items) {
     seenLinks.add(item.link);
     await sendToTelegram(buildTelegramText(item, feed.id));
+    normalizedState.feeds[feed.id] = {
+      ...normalizedState.feeds[feed.id],
+      lastSeenAt: Math.max(lastSeenAt, item.publishedAt),
+      lastLink: item.link,
+    };
   }
 
-  state.feeds = state.feeds || {};
-  state.feeds[feed.id] = items[0].link;
+  state.feeds = normalizedState.feeds;
   saveState(state);
+  return normalizedState;
 }
 
 async function checkRssAndPublish() {
-  const state = { feeds: {} };
+  const state = loadState();
   const feeds = getFeeds();
   const seenLinks = new Set();
 
   for (const feed of feeds) {
     await checkFeed(feed, state, seenLinks);
   }
+
+  saveState(state);
 }
 
 function startBot() {
@@ -287,7 +335,9 @@ if (require.main === module) {
 module.exports = {
   parseRss,
   buildTelegramText,
+  formatPublishedDate,
   getFeedStyle,
+  normalizeState,
   loadState,
   saveState,
   clearState,

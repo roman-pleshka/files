@@ -1,3 +1,6 @@
 {
-  "feeds": {}
+  "feeds": {
+    "tagesschau": "https://www.tagesschau.de/inland/e-autos-foerderung-csu-100.html",
+    "bbc-world": "https://www.bbc.co.uk/news/articles/ckgdkpz07kvo?at_medium=RSS&at_campaign=rss"
+  }
 }
