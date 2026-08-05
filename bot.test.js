@@ -51,19 +51,19 @@ test('buildTelegramText escapes HTML and keeps link', () => {
   assert.match(text, /https:\/\/example.com\/test\?x=1&amp;y=2/);
 });
 
-test('buildTelegramText supports different feed styles', () => {
-  const bbcText = bot.buildTelegramText({
-    title: 'BBC headline',
-    link: 'https://example.com/bbc',
-  }, 'bbc-world');
+test('buildTelegramText supports the TSN styling', () => {
+  const tsnText = bot.buildTelegramText({
+    title: 'TSN headline',
+    link: 'https://example.com/tsn',
+  }, 'tsn-ua');
 
   const neutralText = bot.buildTelegramText({
-    title: 'Tagesschau headline',
-    link: 'https://example.com/tagesschau',
-  }, 'tagesschau');
+    title: 'General news',
+    link: 'https://example.com/news',
+  }, 'news');
 
-  assert.match(bbcText, /🔵|BBC/);
-  assert.match(neutralText, /📰|Tagesschau/);
+  assert.match(tsnText, /📢|TSN/);
+  assert.match(neutralText, /📰|Новини/);
 });
 
 test('formatPublishedDate uses Kyiv timezone', () => {

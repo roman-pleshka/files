@@ -79,22 +79,6 @@ function formatPublishedDate(dateValue) {
 function getFeedStyle(feedName = "News") {
   const normalized = String(feedName).toLowerCase();
 
-  if (normalized.includes("bbc")) {
-    return {
-      prefix: "🔵",
-      titlePrefix: "BBC News",
-      sourceLabel: "BBC",
-    };
-  }
-
-  if (normalized.includes("tagesschau")) {
-    return {
-      prefix: "🟡",
-      titlePrefix: "Tagesschau",
-      sourceLabel: "Tagesschau",
-    };
-  }
-
   if (normalized.includes("tsn")) {
     return {
       prefix: "📢",
