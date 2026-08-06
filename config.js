@@ -11,7 +11,7 @@ const baseConfig = {
   RSS_FEEDS: process.env.RSS_FEEDS ? JSON.parse(process.env.RSS_FEEDS) : defaultFeeds,
   CHECK_INTERVAL_MS: Number(process.env.CHECK_INTERVAL_MS || 60 * 1000),
   RETRY_COUNT: Number(process.env.RETRY_COUNT || 3),
-  CLEAR_STATE_ON_START: process.env.CLEAR_STATE_ON_START !== "false",
+  CLEAR_STATE_ON_START: true,
 };
 
 module.exports = baseConfig;
